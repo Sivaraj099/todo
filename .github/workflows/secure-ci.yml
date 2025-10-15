@@ -9,7 +9,7 @@ permissions:
   contents: read
   packages: write
   security-events: write   # to upload SARIF to Code scanning
-  id-token: write          # for keyless Cosign signing (OIDC)
+  id-token: write          # for keyless Cosign signing (OIDC
 
 env:
   IMAGE_NAME: docker.io/${{ secrets.DOCKER_USERNAME }}/todo-app
