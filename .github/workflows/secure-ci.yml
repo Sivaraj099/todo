@@ -1,0 +1,85 @@
+name: CI/CD Secure TODO App
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+env:
+  IMAGE_NAME: docker.io/${{ secrets.DOCKER_USERNAME }}/todo-app
+
+jobs:
+  build-scan-push-sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for keyless Cosign signing
+      packages: write
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Docker Hub Login
+      - name: Docker Hub Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 4. Set image tags
+      - name: Set Docker image tags
+        id: image_tags
+        run: |
+          SHA_TAG=$(echo $GITHUB_SHA | cut -c1-7)
+          DATE_TAG=$(date +'%Y%m%d%H%M')
+          echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
+          echo "date_tag=$DATE_TAG" >> $GITHUB_OUTPUT
+          echo "latest_tag=latest" >> $GITHUB_OUTPUT
+
+      # 5. Build & Push Docker Image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.image_tags.outputs.sha_tag }}
+            ${{ env.IMAGE_NAME }}:${{ steps.image_tags.outputs.date_tag }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      # 6. Scan Docker image with Trivy
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.image_tags.outputs.sha_tag }}
+          format: 'table'
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # 7. Install Cosign
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # 8. Sign the image (keyless)
+      - name: Sign Docker image with Cosign (keyless)
+        run: |
+          for TAG in ${{ steps.image_tags.outputs.sha_tag }} ${{ steps.image_tags.outputs.date_tag }} latest; do
+            cosign sign ${{ env.IMAGE_NAME }}:$TAG --yes
+          done
+
+      # 9. Verify the signature (keyless)
+      - name: Verify Docker image signature
+        run: |
+          for TAG in ${{ steps.image_tags.outputs.sha_tag }} ${{ steps.image_tags.outputs.date_tag }} latest; do
+            cosign verify ${{ env.IMAGE_NAME }}:$TAG \
+            --certificate-identity-regexp ".*" \
+            --certificate-oidc-issuer-regexp "https://token.actions.githubusercontent.com"
+          done
