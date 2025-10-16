@@ -8,3 +8,4 @@ COPY style.css /usr/share/nginx/html/
 # Optional healthcheck
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s \
   CMD wget -qO- http://127.0.0.1:8080/ || exit 1
+
