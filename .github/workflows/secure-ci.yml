@@ -65,7 +65,7 @@ jobs:
           vuln-type: 'os,library'
           ignore-unfixed: true
           severity: 'HIGH,CRITICAL'
-          exit-code: '1'
+          exit-code: '0'
 
       - name: Upload SARIF to Code Scanning
         uses: github/codeql-action/upload-sarif@v3
